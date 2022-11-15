@@ -1,0 +1,81 @@
+import os, shutil
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Flatten, Dense, Dropout
+import matplotlib.pyplot as plt
+from tensorflow.keras.applications.vgg16 import VGG16
+from keras.preprocessing.image import ImageDataGenerator
+
+# 소규모 데이터셋을 저장할 디렉터리
+base_dir = './Data/Side_Apple/'
+
+# 훈련, 테스트 분할을 위한 디렉터리
+train_dir = os.path.join(base_dir, 'train')
+
+
+test_dir = os.path.join(base_dir, 'test')
+
+
+conv_base = VGG16(weights='imagenet',         # 초기화할 가중치 종류
+      include_top = False,        # FNN중 사용하지 않고 내가 재구성 할 것임
+      input_shape = (150,150,3))  
+
+conv_base.trainable = False # 컨브넷 영결 , 훈련이 적용되지 않음
+
+
+# 훈련용 제너레이터
+train_datagen = ImageDataGenerator(
+    rescale=1./255,    #전처리
+    rotation_range=40, # 랜덤하게 사진을 회전시킬 각도 범위(0~180)
+    width_shift_range=0.2, #사진을 수평과 수직으로 랜덤하게 평행 이동시킬 범위
+    height_shift_range=0.2,
+    shear_range=0.2, #랜덤하게 전단 변환을 적용할 각도 범위
+    zoom_range=0.2,   #랜덤하게 사진을 확대할 범위
+    horizontal_flip=True, #랜덤하게 이미지를 수평으로 뒤집기
+    fill_mode='nearest') #회전이나 가로/세로 이동으로 인해 새롭게 생성해야 할 픽셀을 채울 전략
+    
+train_generator = train_datagen.flow_from_directory(
+    train_dir , #타깃 디렉토리
+    target_size=(150,150), #모든 이미지의 크기를 150x150로 변경
+    batch_size=20, #하드 드라이브에서 몇 장의 이미지를 메모리에 올릴건지(훈련용으로)
+    class_mode='binary' # 이진분류의 목적이므로 자동으로 train_dir아래에 두가지의 폴더를 기준으로 라벨링처리
+    )
+
+model = Sequential()
+
+# 사전학습 모델 추가
+
+model.add(conv_base)
+
+#FNN층 구성
+
+model.add(Flatten())
+model.add(Dropout(0.3))
+model.add(Dense(512,activation='relu'))
+model.add(Dense(1,activation='sigmoid')) #이진 분류
+
+model.compile(loss='binary_crossentropy',
+              optimizer='adam',
+              metrics=['accuracy']  
+                )
+
+epoch_hist = model.fit_generator(
+                train_generator, #훈련용 제너레이터
+                steps_per_epoch=50, #에포크당 100step으로
+                epochs=10, #에포크 30회
+                verbose = 1
+)
+
+acc = epoch_hist.history['accuracy']
+loss = epoch_hist.history['loss']
+
+plt.plot(acc, label='Training acc')
+plt.title('Training and validation accuracy')
+plt.legend()
+
+plt.figure()
+
+plt.plot(loss, label='Training loss')
+plt.title('Training and validation loss')
+plt.legend()
+
+plt.show()
